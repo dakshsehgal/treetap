@@ -1,70 +1,191 @@
-import { Image, StyleSheet, Platform } from 'react-native';
-
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { Image, StyleSheet, Platform } from "react-native";
+import * as React from "react";
+import { Button, Checkbox, TextInput } from "react-native-paper";
+import ParallaxScrollView from "@/components/ParallaxScrollView";
+import { ThemedText } from "@/components/ThemedText";
+import { ThemedView } from "@/components/ThemedView";
+import DeviceModal from "@/components/DeviceConnectionModal";
+import useBLE from "@/hooks/useBle";
 
 export default function HomeScreen() {
+  const [includeLocation, setIncludeLocation] = React.useState(false);
+  const [message, setMessage] = React.useState("");
+  const [locationEnabled, setLocationEnabled] = React.useState(false);
+  const [bluetoothEnabled, setBluetoothEnabled] = React.useState(false);
+
+  const {
+    allDevices,
+    connectedDevice,
+    connectToDevice,
+    color,
+    requestPermissions,
+    scanForPeripherals,
+  } = useBLE();
+  const [isModalVisible, setIsModalVisible] = React.useState<boolean>(false);
+
+  const scanForDevices = async () => {
+    const isPermissionsEnabled = await requestPermissions();
+    if (isPermissionsEnabled) {
+      scanForPeripherals();
+    }
+  };
+
+  const hideModal = () => {
+    setIsModalVisible(false);
+  };
+
+  const openModal = async () => {
+    scanForDevices();
+    setIsModalVisible(true);
+  };
+
+  // const handleLocationPermission = async () => {
+  //   let isPermitted = false;
+  //   const result = await request(PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION);
+  //   isPermitted = result === RESULTS.GRANTED;
+  //   // }
+
+  //   if (isPermitted) {
+  //     //Location permitted successfully, display next permission
+  //   }
+  // };
+
+  // const handleBluetoothPermission = async () => {
+  //   const isPermissionAllowed = await request(
+  //     PERMISSIONS.ANDROID.BLUETOOTH_SCAN
+  //   );
+  //   if (isPermissionAllowed === RESULTS.GRANTED) {
+  //     setBluetoothEnabled(true);
+  //   }
+  // };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({ ios: 'cmd + d', android: 'cmd + m' })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <>
+      {!locationEnabled && !bluetoothEnabled ? (
+        <>
+          <Button
+            mode="contained"
+            onPress={() => console.log("pressed")}
+            buttonColor="green"
+            style={styles.sendButton}
+          >
+            Request location
+          </Button>
+          <Button
+            mode="contained"
+            onPress={openModal}
+            buttonColor="green"
+            style={styles.sendButton}
+          >
+            Request bluetooth
+          </Button>
+          <DeviceModal
+            closeModal={hideModal}
+            visible={isModalVisible}
+            connectToPeripheral={connectToDevice}
+            devices={allDevices}
+          />
+        </>
+      ) : (
+        <ParallaxScrollView
+          headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
+          headerImage={
+            <ThemedView style={styles.headerView}>
+              <Image
+                source={require("@/assets/images/forest.jpg")}
+                style={styles.reactLogo}
+              />
+
+              <ThemedText style={styles.headerText} type="title">
+                TreeTap
+              </ThemedText>
+              <ThemedText style={styles.headerSubtitle} type="subtitle">
+                Send SOS, receive help
+              </ThemedText>
+            </ThemedView>
+          }
+        >
+          {/* <Image
+        source={require("@/assets/images/forest.jpg")}
+        style={styles.reactLogo}
+      /> */}
+          <ThemedView style={styles.titleContainer}>
+            <ThemedText type="title">You are connected</ThemedText>
+          </ThemedView>
+          <ThemedView style={styles.stepContainer}>
+            <Checkbox
+              status={includeLocation ? "checked" : "unchecked"}
+              color="green"
+              onPress={() => {
+                setIncludeLocation(!includeLocation);
+              }}
+            />
+            <ThemedText style={styles.checkboxText}>
+              Attach current location
+            </ThemedText>
+          </ThemedView>
+          <ThemedView>
+            <TextInput
+              placeholder="Your message"
+              value={message}
+              onChangeText={(text) => setMessage(text)}
+              multiline
+            />
+            <Button
+              mode="contained"
+              onPress={() => console.log("Pressed")}
+              buttonColor="green"
+              style={styles.sendButton}
+            >
+              Send
+            </Button>
+          </ThemedView>
+        </ParallaxScrollView>
+      )}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    // flexDirection: 'row',
+    alignItems: "center",
+    textAlign: "center",
     gap: 8,
   },
   stepContainer: {
     gap: 8,
     marginBottom: 8,
+    display: "flex",
+    flexDirection: "row",
   },
   reactLogo: {
-    height: 178,
-    width: 290,
+    // height: 180,
+    // width: 290,
     bottom: 0,
     left: 0,
-    position: 'absolute',
+    position: "absolute",
+  },
+  headerText: {
+    textAlign: "center",
+    marginTop: 270,
+    color: "white",
+  },
+  headerView: {
+    height: 550,
+  },
+  headerSubtitle: {
+    textAlign: "center",
+    // marginTop: 120,
+    color: "white",
+    fontSize: 13,
+  },
+  checkboxText: {
+    // marginLeft: 15,
+    textAlign: "center",
+    alignSelf: "center",
+  },
+  sendButton: {
+    marginTop: 20,
   },
 });
