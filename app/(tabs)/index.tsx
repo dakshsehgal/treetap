@@ -1,147 +1,339 @@
-import { Image, StyleSheet, Platform } from "react-native";
+import {
+  Image,
+  StyleSheet,
+  Platform,
+  Alert,
+  PermissionsAndroid,
+} from "react-native";
 import * as React from "react";
 import { Button, Checkbox, TextInput } from "react-native-paper";
+import { Buffer } from "buffer";
 import ParallaxScrollView from "@/components/ParallaxScrollView";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import DeviceModal from "@/components/DeviceConnectionModal";
-import useBLE from "@/hooks/useBle";
+import * as Location from "expo-location";
+// import useBLE from "@/hooks/useBLE";
+import BLEAdvertiser from "react-native-ble-advertiser";
+import { DeviceContext } from "../DeviceContext";
+// import useBLE from "@/hooks/useBLE";
 
 export default function HomeScreen() {
+  const [location, setLocation] = React.useState("33.769513,-84.3857433");
   const [includeLocation, setIncludeLocation] = React.useState(false);
   const [message, setMessage] = React.useState("");
-  const [locationEnabled, setLocationEnabled] = React.useState(false);
-  const [bluetoothEnabled, setBluetoothEnabled] = React.useState(false);
+  const [recipient, setRecipient] = React.useState("");
 
-  const {
-    allDevices,
-    connectedDevice,
-    connectToDevice,
-    color,
-    requestPermissions,
-    scanForPeripherals,
-  } = useBLE();
-  const [isModalVisible, setIsModalVisible] = React.useState<boolean>(false);
+  const { deviceMessages, startScan, stopScan, username } =
+    React.useContext(DeviceContext);
 
-  const scanForDevices = async () => {
-    const isPermissionsEnabled = await requestPermissions();
-    if (isPermissionsEnabled) {
-      scanForPeripherals();
+  React.useEffect(() => {
+    console.log("location became", location);
+  }, [location]);
+
+  React.useEffect(() => {
+    const fetchLocation = async () => {
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      setLocation(
+        String(loc.coords.latitude) + "," + String(loc.coords.longitude)
+      );
+    };
+
+    if (includeLocation) {
+      fetchLocation();
+    }
+  }, [includeLocation]);
+  // const scanForDevices = async () => {
+  //   const isPermissionsEnabled = await requestPermissions();
+  //   if (isPermissionsEnabled) {
+  //     scanForPeripherals();
+  //   }
+  // };
+
+  //
+  // React.useEffect(() => {
+  //   if (devices.length > 0) {
+  //     // console.log("Devices found:", devices);
+
+  //     // const filteredArray = devices.filter((item) =>
+  //     //   item.name?.includes("TreeTap")
+  //     // );
+  //     // if (filteredArray.length > 0) {
+
+  //     const data = devices.map((d) => {
+  //       if (d.manufacturerData) {
+  //         return Buffer.from(d.manufacturerData, "base64").toString("ascii");
+  //       } else {
+  //         return "none";
+  //       }
+  //     });
+  //     console.log("found", devices);
+  //     console.log("found data", data);
+  //     // }
+  //   }
+  // }, [devices]);
+
+  const getLocation = async () => {
+    try {
+      const userLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      setLocation(
+        String(userLocation.coords.latitude) +
+          "," +
+          String(userLocation.coords.longitude)
+      );
+    } catch (error) {
+      console.error(error);
     }
   };
 
-  const hideModal = () => {
-    setIsModalVisible(false);
+  const requestPermissions = async () => {
+    try {
+      if (Platform.OS === "android") {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: "BLE Avertiser Example App",
+            message: "Example App access to your location ",
+            buttonNeutral: "Ask Me Later",
+            buttonNegative: "Cancel",
+            buttonPositive: "OK",
+          }
+        );
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          console.log("[Permissions]", "Location Permission granted");
+        } else {
+          console.log("[Permissions]", "Location Permission denied");
+        }
+
+        const adv = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADVERTISE,
+          {
+            title: "BLE Avertiser Example App",
+            message: "Example App access to your location ",
+            buttonNeutral: "Ask Me Later",
+            buttonNegative: "Cancel",
+            buttonPositive: "OK",
+          }
+        );
+        if (adv === PermissionsAndroid.RESULTS.GRANTED) {
+          console.log("[Permissions]", "Advertising Permission granted");
+        } else {
+          console.log("[Permissions]", "Advertising Permission denied");
+        }
+      }
+
+      const blueoothActive = await BLEAdvertiser.getAdapterState()
+        .then((result) => {
+          console.log("[Bluetooth]", "Bluetooth Status", result);
+          return result === "STATE_ON";
+        })
+        .catch((error) => {
+          console.log("[Bluetooth]", "Bluetooth Not Enabled");
+          return false;
+        });
+
+      if (!blueoothActive) {
+        await Alert.alert(
+          "Example requires bluetooth to be enabled",
+          "Would you like to enable Bluetooth?",
+          [
+            {
+              text: "Yes",
+              onPress: () => BLEAdvertiser.enableAdapter(),
+            },
+            {
+              text: "No",
+              onPress: () => console.log("Do Not Enable Bluetooth Pressed"),
+              style: "cancel",
+            },
+          ]
+        );
+      }
+    } catch (err) {
+      console.warn(err);
+    }
   };
 
-  const openModal = async () => {
-    scanForDevices();
-    setIsModalVisible(true);
+  const convertMsgToPayload = (message: string) => {
+    return Array.from(message).map((char) => char.charCodeAt(0));
   };
 
-  // const handleLocationPermission = async () => {
-  //   let isPermitted = false;
-  //   const result = await request(PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION);
-  //   isPermitted = result === RESULTS.GRANTED;
-  //   // }
+  const convertb64ToAscii = () => {
+    console.log(
+      "iububi",
+      Buffer.from(
+        "AgEGCAlUcmVlVGFwDP/M+gBoZXkgbXkgYQgJVHJlZVRhcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "base64"
+      ).toString("ascii")
+    );
+  };
 
-  //   if (isPermitted) {
-  //     //Location permitted successfully, display next permission
-  //   }
-  // };
+  function splitIntoChunks<T>(
+    array: T[],
+    sender_id: T,
+    chunkSize: number = 8
+  ): T[][] {
+    const result: T[][] = [];
 
-  // const handleBluetoothPermission = async () => {
-  //   const isPermissionAllowed = await request(
-  //     PERMISSIONS.ANDROID.BLUETOOTH_SCAN
-  //   );
-  //   if (isPermissionAllowed === RESULTS.GRANTED) {
-  //     setBluetoothEnabled(true);
-  //   }
-  // };
+    for (let i = 0; i < array.length; i += chunkSize - 1) {
+      const append_arr = [sender_id, ...array.slice(i, i + chunkSize - 1)];
+      // append_arr = append_arr.concat(array.slice(i, i + chunkSize - 1));
+      result.push(append_arr);
+    }
+    return result;
+  }
+
+  const openDialog = async () => {
+    await new Promise((f) => setTimeout(f, 2000));
+    Alert.alert(
+      "",
+      "Your message has been sent",
+      [
+        {
+          text: "ok",
+          // onPress: () => Alert.alert("Cancel Pressed"),
+          style: "cancel",
+        },
+      ],
+      {
+        cancelable: true,
+      }
+    );
+  };
+  const advertiseBle = async () => {
+    await requestPermissions();
+    await getLocation();
+
+    const UUID = "A47595A8-8121-43D7-8761-A13E67E9BBC0";
+
+    BLEAdvertiser.setCompanyId(0xfacc);
+    console.log("is location enabled", includeLocation);
+    const msg = includeLocation
+      ? location + "/" + username + "/" + recipient + "/" + message + "$"
+      : "0,0" + "/" + username + "/" + recipient + "/" + message + "$";
+
+    console.log("message is", msg);
+    const hexMessage = convertMsgToPayload(msg);
+    console.log("hex message is", hexMessage);
+    const splitMessage = splitIntoChunks(hexMessage, 69);
+    console.log("split message is", splitMessage);
+    let hasDialogBeenShown = false;
+    for (let i = 0; i < splitMessage.length; i++) {
+      const payload = [i, ...splitMessage[i]];
+      console.log(payload);
+      BLEAdvertiser.broadcast(UUID, payload, {
+        includeDeviceName: false,
+        connectable: false,
+        // txPowerLevel: BLEAdvertiser.ADVERTISE_TX_POWER_MEDIUM
+      }) // The service UUID and additional manufacturer data.
+        .then(() => {
+          if (!hasDialogBeenShown) {
+            openDialog();
+            hasDialogBeenShown = !hasDialogBeenShown;
+          }
+        })
+        .catch((error) => console.log("Broadcasting Error", error));
+      await new Promise((f) => setTimeout(f, 7000));
+      BLEAdvertiser.stopBroadcast()
+        .then((err) => console.log("stopped", err))
+        .catch((error) => console.log("Stop Broadcast Error", error));
+    }
+  };
 
   return (
     <>
-      {!locationEnabled && !bluetoothEnabled ? (
-        <>
-          <Button
-            mode="contained"
-            onPress={() => console.log("pressed")}
-            buttonColor="green"
-            style={styles.sendButton}
-          >
-            Request location
-          </Button>
-          <Button
-            mode="contained"
-            onPress={openModal}
-            buttonColor="green"
-            style={styles.sendButton}
-          >
-            Request bluetooth
-          </Button>
-          <DeviceModal
-            closeModal={hideModal}
-            visible={isModalVisible}
-            connectToPeripheral={connectToDevice}
-            devices={allDevices}
-          />
-        </>
-      ) : (
-        <ParallaxScrollView
-          headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
-          headerImage={
-            <ThemedView style={styles.headerView}>
-              <Image
-                source={require("@/assets/images/forest.jpg")}
-                style={styles.reactLogo}
-              />
+      <ParallaxScrollView
+        headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
+        headerImage={
+          <ThemedView style={styles.headerView}>
+            <Image
+              source={require("@/assets/images/forest.jpg")}
+              style={styles.reactLogo}
+            />
 
-              <ThemedText style={styles.headerText} type="title">
-                TreeTap
-              </ThemedText>
-              <ThemedText style={styles.headerSubtitle} type="subtitle">
-                Send SOS, receive help
-              </ThemedText>
-            </ThemedView>
-          }
-        >
-          {/* <Image
-        source={require("@/assets/images/forest.jpg")}
-        style={styles.reactLogo}
-      /> */}
-          <ThemedView style={styles.titleContainer}>
-            <ThemedText type="title">You are connected</ThemedText>
-          </ThemedView>
-          <ThemedView style={styles.stepContainer}>
-            <Checkbox
-              status={includeLocation ? "checked" : "unchecked"}
-              color="green"
-              onPress={() => {
-                setIncludeLocation(!includeLocation);
-              }}
-            />
-            <ThemedText style={styles.checkboxText}>
-              Attach current location
+            <ThemedText style={styles.headerText} type="title">
+              TreeTap
             </ThemedText>
+            {/* <ThemedText style={styles.headerSubtitle} type="subtitle">
+              Send SOS, receive help
+            </ThemedText> */}
           </ThemedView>
-          <ThemedView>
-            <TextInput
-              placeholder="Your message"
-              value={message}
-              onChangeText={(text) => setMessage(text)}
-              multiline
-            />
-            <Button
-              mode="contained"
-              onPress={() => console.log("Pressed")}
-              buttonColor="green"
-              style={styles.sendButton}
-            >
-              Send
-            </Button>
-          </ThemedView>
-        </ParallaxScrollView>
-      )}
+        }
+        headerHeight={480}
+      >
+        <ThemedView style={styles.titleContainer}>
+          <ThemedText type="subtitle">your username is: {username}</ThemedText>
+        </ThemedView>
+        <ThemedView style={styles.stepContainer}>
+          <Checkbox
+            status={includeLocation ? "checked" : "unchecked"}
+            color="green"
+            onPress={() => {
+              setIncludeLocation(!includeLocation);
+            }}
+          />
+          <ThemedText style={styles.checkboxText}>
+            Attach current location
+          </ThemedText>
+        </ThemedView>
+        <ThemedView>
+          {/* <ThemedText>Who would you like to send message to?</ThemedText> */}
+          <TextInput
+            placeholder="Your recipient"
+            value={recipient}
+            multiline
+            onChangeText={(text) => setRecipient(text)}
+          />
+          <TextInput
+            placeholder="Your message"
+            value={message}
+            multiline
+            onChangeText={(text) => setMessage(text)}
+            style={styles.messageInput}
+          />
+          <Button
+            mode="contained"
+            onPress={advertiseBle}
+            buttonColor="green"
+            style={styles.sendButton}
+          >
+            Send Message
+          </Button>
+          {/* <Button
+            mode="contained"
+            onPress={scanForDevices}
+            buttonColor="green"
+            style={styles.sendButton}
+          >
+            scan BLE devices
+          </Button> */}
+          {/* <Button
+            mode="contained"
+            onPress={convertb64ToAscii}
+            buttonColor="green"
+            style={styles.sendButton}
+          >
+            Translate
+          </Button> */}
+        </ThemedView>
+      </ParallaxScrollView>
+      {/* 
+      <Portal>
+        <Dialog visible={visible} onDismiss={hideDialog}>
+          <Dialog.Title>SOS Sent</Dialog.Title>
+          <Dialog.Content>
+            <ThemedText>
+              Your SOS message has been successfully sent.
+            </ThemedText>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={hideDialog}>OK</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal> */}
     </>
   );
 }
@@ -172,7 +364,7 @@ const styles = StyleSheet.create({
     color: "white",
   },
   headerView: {
-    height: 550,
+    height: 630,
   },
   headerSubtitle: {
     textAlign: "center",
@@ -186,6 +378,9 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   sendButton: {
+    marginTop: 20,
+  },
+  messageInput: {
     marginTop: 20,
   },
 });
